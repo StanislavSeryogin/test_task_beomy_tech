@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:test_task_beomy_tech/home/home_page.dart';
 
 class AuthPage extends StatefulWidget {
@@ -71,6 +72,47 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   //
+  // Method for Google Sign-In
+  //
+
+  Future<void> _signInWithGoogle() async {
+    try {
+      // Запускаємо процес вибору Google-акаунту
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        // Якщо користувач скасував вікно вибору акаунту
+        throw Exception('Вхід скасовано користувачем');
+      }
+
+      // Отримуємо токени доступу з Google
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Створюємо спеціальний credential для Firebase
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Входимо у Firebase за допомогою обліковки Google
+      UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      final user = userCredential.user;
+      if (user != null) {
+        print('Увійшов через Google: ${user.email}');
+        // Переходимо на HomePage (або PresentPage)
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
+    } catch (e) {
+      print('Помилка входу через Google: $e');
+    }
+  }
+
+  //
   // UI
   //
   @override
@@ -130,6 +172,27 @@ class _AuthPageState extends State<AuthPage> {
                   }
                 },
                 child: const Text('Реєстрація'),
+              ),
+              const SizedBox(height: 16),
+              // "Login with Google" button
+              ElevatedButton(
+                onPressed: _signInWithGoogle,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Можете додати свій логотип Google (png/svg), якщо бажаєте
+                    // Напр. Image.asset('assets/google_logo.png', height: 24),
+                    const Icon(Icons.login, color: Colors.blueAccent),
+                    const SizedBox(width: 8),
+                    const Text('Увійти через Google'),
+                  ],
+                ),
               ),
             ],
           ),
