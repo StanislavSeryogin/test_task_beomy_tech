@@ -15,25 +15,26 @@ class _AuthPageState extends State<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _showEmailForm = false;
 
-  //
+  // Method for handling the result of authorization
+  void _handleAuthResult(User? user, String provider) {
+    if (user != null) {
+      print('Увійшов через $provider: ${user.email}');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    }
+  }
+
   // Registration with email + password
-  //
-
   Future<void> _register() async {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
               email: _emailController.text, password: _passwordController.text);
-
-      User? user = userCredential.user;
-      if (user != null) {
-        print('Зареєстрований користувач: ${user.email}');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      }
+      _handleAuthResult(userCredential.user, 'Email/Password');
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
         print('Занадто слабкий пароль.');
@@ -45,24 +46,13 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
-  //
   // Login with email + password
-  //
-
   Future<void> _signIn() async {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
               email: _emailController.text, password: _passwordController.text);
-
-      User? user = userCredential.user;
-      if (user != null) {
-        print('Користувач увійшов: ${user.email}');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      }
+      _handleAuthResult(userCredential.user, 'Email/Password');
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
         print('Користувача з таким email не знайдено.');
@@ -72,9 +62,7 @@ class _AuthPageState extends State<AuthPage> {
     }
   }
 
-  //
   // Method for Google Sign-In
-  //
 
   Future<void> _signInWithGoogle() async {
     try {
@@ -91,15 +79,7 @@ class _AuthPageState extends State<AuthPage> {
       );
       UserCredential userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
-
-      final user = userCredential.user;
-      if (user != null) {
-        print('Увійшов через Google: ${user.email}');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      }
+      _handleAuthResult(userCredential.user, 'Google');
     } catch (e) {
       print('Помилка входу через Google: $e');
     }
@@ -122,9 +102,63 @@ class _AuthPageState extends State<AuthPage> {
     throw Exception('Помилка входу через Facebook: ${result.status}');
   }
 
-  //
+  Widget _buildEmailPasswordForm() {
+    return Column(
+      key: const ValueKey('EmailForm'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _emailController,
+          decoration: const InputDecoration(labelText: 'Email'),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Будь ласка, введіть email';
+            }
+            return null;
+          },
+        ),
+        TextFormField(
+          controller: _passwordController,
+          decoration: const InputDecoration(labelText: 'Пароль'),
+          obscureText: true,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Будь ласка, введіть пароль';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                _signIn();
+              }
+            },
+            child: const Text('Вхід'),
+          ),
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                _register();
+              }
+            },
+            child: const Text('Реєстрація'),
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   // UI
-  //
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,95 +171,60 @@ class _AuthPageState extends State<AuthPage> {
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              // Email field
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Будь ласка, введіть email';
-                  }
-                  return null;
-                },
-              ),
-              // Password field
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Пароль'),
-                obscureText: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Будь ласка, введіть пароль';
-                  }
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // "Login" button (email/password)
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    _signIn();
-                  }
-                },
-                child: const Text('Вхід'),
-              ),
-
-              // "Register" button (email/password)
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    _register();
-                  }
-                },
-                child: const Text('Реєстрація'),
-              ),
-              const SizedBox(height: 16),
-              // "Login with Google" button
-              ElevatedButton(
-                onPressed: _signInWithGoogle,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Можете додати свій логотип Google (png/svg), якщо бажаєте
-                    // Напр. Image.asset('assets/google_logo.png', height: 24),
-                    const Icon(Icons.login, color: Colors.blueAccent),
-                    const SizedBox(width: 8),
-                    const Text('Увійти через Google'),
-                  ],
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => setState(() {
+                    _showEmailForm = !_showEmailForm;
+                  }),
+                  child: Text(_showEmailForm
+                      ? 'Сховати Email/Пароль'
+                      : 'Показати Email/Пароль'),
                 ),
               ),
-              ElevatedButton(
-                onPressed: () async {
-                  try {
-                    final userCredential = await signInWithFacebook();
-                    final user = userCredential.user;
-                    if (user != null) {
-                      print('Увійшов через Facebook: ${user.email}');
-                      // Перехід на HomePage або іншу сторінку
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const HomePage()),
-                      );
-                    }
-                  } catch (e) {
-                    print('Помилка: $e');
-                  }
-                },
-                child: const Text('Увійти через Facebook'),
-              )
+
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, animation) => SizeTransition(
+                  sizeFactor: animation,
+                  child: child,
+                ),
+                child: _showEmailForm
+                    ? _buildEmailPasswordForm()
+                    : const SizedBox(key: ValueKey('EmptySpace')),
+              ),
+              Divider(),
+              selectButton('assets/google.512x512.png', 'Увійти через Google',
+                  _signInWithGoogle),
+              selectButton('assets/Facebook_logo_PNG12.png',
+                  'Увійти через Facebook', signInWithFacebook)
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  SizedBox selectButton(
+      String? imagePath, String nameButton, Function onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
+        onPressed: () => onPressed,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(imagePath ?? '', height: 24),
+            const SizedBox(width: 8),
+            Text(nameButton),
+          ],
         ),
       ),
     );
