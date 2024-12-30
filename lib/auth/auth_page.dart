@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:test_task_beomy_tech/home/home_page.dart';
 
 class AuthPage extends StatefulWidget {
@@ -15,16 +17,33 @@ class _AuthPageState extends State<AuthPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _localAuth = LocalAuthentication();
+  final _secureStorage = const FlutterSecureStorage();
   bool _showEmailForm = false;
 
+  static String emailKey = 'email';
+  static String passwordKey = 'password';
+  static String useBiometricsKey = 'useBiometrics';
+
+  @override
+  void initState() {
+    super.initState();
+    _tryBiometricLogin();
+  }
+
   // Method for handling the result of authorization
-  void _handleAuthResult(User? user, String provider) {
+  void _handleAuthResult(User? user, String provider) async {
     if (user != null) {
-      print('Увійшов через $provider: ${user.email}');
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
+      debugPrint('Entered $provider: ${user.email}');
+      String? useBiometrics = await _secureStorage.read(key: useBiometricsKey);
+      if (useBiometrics == 'true') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      } else {
+        _askBiometrics(user);
+      }
     }
   }
 
@@ -37,12 +56,12 @@ class _AuthPageState extends State<AuthPage> {
       _handleAuthResult(userCredential.user, 'Email/Password');
     } on FirebaseAuthException catch (e) {
       if (e.code == 'weak-password') {
-        print('Занадто слабкий пароль.');
+        debugPrint('Password too weak.');
       } else if (e.code == 'email-already-in-use') {
-        print('Акаунт з таким email вже існує.');
+        debugPrint('An account with this email already exists.');
       }
     } catch (e) {
-      print(e);
+      debugPrint('error: $e');
     }
   }
 
@@ -55,9 +74,9 @@ class _AuthPageState extends State<AuthPage> {
       _handleAuthResult(userCredential.user, 'Email/Password');
     } on FirebaseAuthException catch (e) {
       if (e.code == 'user-not-found') {
-        print('Користувача з таким email не знайдено.');
+        debugPrint('No user with this email was found.');
       } else if (e.code == 'wrong-password') {
-        print('Невірний пароль.');
+        debugPrint('Incorrect password.');
       }
     }
   }
@@ -68,7 +87,7 @@ class _AuthPageState extends State<AuthPage> {
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        throw Exception('Вхід скасовано користувачем');
+        throw Exception('Login canceled by user');
       }
 
       final GoogleSignInAuthentication googleAuth =
@@ -81,7 +100,7 @@ class _AuthPageState extends State<AuthPage> {
           await FirebaseAuth.instance.signInWithCredential(credential);
       _handleAuthResult(userCredential.user, 'Google');
     } catch (e) {
-      print('Помилка входу через Google: $e');
+      debugPrint('Google login error: $e');
     }
   }
 
@@ -99,7 +118,7 @@ class _AuthPageState extends State<AuthPage> {
             .signInWithCredential(facebookAuthCredential);
       }
     }
-    throw Exception('Помилка входу через Facebook: ${result.status}');
+    throw Exception('Facebook login error: ${result.status}');
   }
 
   Widget _buildEmailPasswordForm() {
@@ -113,18 +132,18 @@ class _AuthPageState extends State<AuthPage> {
           decoration: const InputDecoration(labelText: 'Email'),
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return 'Будь ласка, введіть email';
+              return 'Please enter your email.';
             }
             return null;
           },
         ),
         TextFormField(
           controller: _passwordController,
-          decoration: const InputDecoration(labelText: 'Пароль'),
+          decoration: const InputDecoration(labelText: 'Password'),
           obscureText: true,
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return 'Будь ласка, введіть пароль';
+              return 'Please enter your password';
             }
             return null;
           },
@@ -138,7 +157,7 @@ class _AuthPageState extends State<AuthPage> {
                 _signIn();
               }
             },
-            child: const Text('Вхід'),
+            child: const Text('Login'),
           ),
         ),
         SizedBox(
@@ -149,12 +168,107 @@ class _AuthPageState extends State<AuthPage> {
                 _register();
               }
             },
-            child: const Text('Реєстрація'),
+            child: const Text('Registration'),
           ),
         ),
         const SizedBox(height: 16),
       ],
     );
+  }
+
+  // Запит на дозвіл використання біометрії
+  Future<void> _askBiometrics(User? user) async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Use biometrics?'),
+          content: const Text(
+              'Do you want to use biometrics to quickly log into the app next time?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('No'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const HomePage()),
+                );
+              },
+            ),
+            TextButton(
+              child: const Text('Yes'),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _enableBiometricLogin(user);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _enableBiometricLogin(User? user) async {
+    if (user != null) {
+      await _secureStorage.write(key: useBiometricsKey, value: 'true');
+      await _secureStorage.write(key: emailKey, value: user.email);
+      await _secureStorage.write(
+          key: passwordKey, value: _passwordController.text);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    }
+  }
+
+// Method for biometric login
+  Future<void> _tryBiometricLogin() async {
+    try {
+      String? useBiometrics = await _secureStorage.read(key: useBiometricsKey);
+      if (useBiometrics != 'true') {
+        debugPrint('Biometrics is not activated.');
+
+        return;
+      }
+
+      bool canCheck = await _localAuth.canCheckBiometrics ||
+          await _localAuth.isDeviceSupported();
+      if (!canCheck) {
+        debugPrint('The device does not support biometrics.');
+
+        return;
+      }
+
+      bool didAuthenticate = await _localAuth.authenticate(
+        localizedReason: 'Verify your identity through biometrics',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+        ),
+      );
+
+      debugPrint('Biometric: $didAuthenticate');
+
+      if (didAuthenticate) {
+        final email = await _secureStorage.read(key: emailKey);
+        final password = await _secureStorage.read(key: passwordKey);
+
+        debugPrint('Email: $email, Password: $password');
+
+        if (email != null && password != null) {
+          final userCredential =
+              await FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+          _handleAuthResult(userCredential.user, 'Biometric');
+        } else {
+          debugPrint('There is no saved data for biometrics.');
+        }
+      }
+    } catch (e) {
+      debugPrint('Biometrics error: $e');
+    }
   }
 
   // UI
@@ -164,7 +278,7 @@ class _AuthPageState extends State<AuthPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: const Text('Авторизація'),
+        title: const Text('Authorization'),
       ),
       body: Form(
         key: _formKey,
@@ -180,11 +294,10 @@ class _AuthPageState extends State<AuthPage> {
                     _showEmailForm = !_showEmailForm;
                   }),
                   child: Text(_showEmailForm
-                      ? 'Сховати Email/Пароль'
-                      : 'Показати Email/Пароль'),
+                      ? 'Hide Email/Пароль'
+                      : 'Show Email/Пароль'),
                 ),
               ),
-
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 transitionBuilder: (child, animation) => SizeTransition(
@@ -208,7 +321,7 @@ class _AuthPageState extends State<AuthPage> {
   }
 
   SizedBox selectButton(
-      String? imagePath, String nameButton, Function onPressed) {
+      String? imagePath, String nameButton, Function() onPressed) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
@@ -217,7 +330,7 @@ class _AuthPageState extends State<AuthPage> {
           foregroundColor: Colors.black,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         ),
-        onPressed: () => onPressed,
+        onPressed: onPressed,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
