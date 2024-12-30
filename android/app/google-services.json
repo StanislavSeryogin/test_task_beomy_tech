@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "553732960004",
+    "project_id": "test-task-beomy-tech",
+    "storage_bucket": "test-task-beomy-tech.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:553732960004:android:faab2152b3155f8004aa51",
+        "android_client_info": {
+          "package_name": "com.example.test_task_beomy_tech"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDta-AUMJ4kFsN999yvwapLFy1l9rz2_iM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
